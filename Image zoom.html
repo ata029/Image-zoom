@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多照片裁剪工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        canvas {
+            display: none;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>多照片裁剪工具</h1>
+    <label for="presetSize">選擇裁剪大小：</label>
+    <select id="presetSize">
+        <option value="800">長邊為800</option>
+        <option value="custom">自訂長邊大小</option>
+    </select>
+    <div id="customSizeInputs" style="display: none;">
+        <label>
+            自訂裁剪最大邊長：
+            <input type="number" id="customMaxSize" value="1080">
+        </label>
+    </div>
+    <input type="file" id="imageInput" accept="image/*" multiple>
+    <button id="downloadAll" style="display: none;">下載所有裁剪後的圖片</button>
+    <canvas id="canvas"></canvas>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.6.0/jszip.min.js"></script>
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const downloadAll = document.getElementById('downloadAll');
+        const presetSize = document.getElementById('presetSize');
+        const customSizeInputs = document.getElementById('customSizeInputs');
+        const customMaxSize = document.getElementById('customMaxSize');
+        const zip = new JSZip();
+
+        presetSize.addEventListener('change', function() {
+            if (presetSize.value === 'custom') {
+                customSizeInputs.style.display = 'block';
+            } else {
+                customSizeInputs.style.display = 'none';
+            }
+        });
+
+        imageInput.addEventListener('change', function(e) {
+            const files = e.target.files;
+            const promises = [];
+            let maxSize;
+
+            if (presetSize.value !== 'custom') {
+                maxSize = parseInt(presetSize.value);
+            } else {
+                maxSize = parseInt(customMaxSize.value);
+            }
+
+            Array.from(files).forEach((file, index) => {
+                const reader = new FileReader();
+
+                const promise = new Promise((resolve) => {
+                    reader.onload = function(event) {
+                        const img = new Image();
+                        img.onload = function() {
+                            let cropWidth, cropHeight;
+                            if (img.width > img.height) {
+                                cropWidth = maxSize;
+                                cropHeight = maxSize * (img.height / img.width);
+                            } else {
+                                cropHeight = maxSize;
+                                cropWidth = maxSize * (img.width / img.height);
+                            }
+
+                            // 設置 canvas 大小
+                            canvas.width = cropWidth;
+                            canvas.height = cropHeight;
+
+                            // 繪製圖片
+                            ctx.drawImage(img, 0, 0, cropWidth, cropHeight);
+
+                            // 將裁剪後的圖片添加到zip
+                            canvas.toBlob(function(blob) {
+                                zip.file(`cropped_image_${index + 1}.jpg`, blob, { quality: 0.9 });
+                                resolve();
+                            }, 'image/jpeg', 0.9);
+                        };
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+
+                promises.push(promise);
+            });
+
+            Promise.all(promises).then(() => {
+                downloadAll.style.display = 'block';
+            });
+        });
+
+        downloadAll.addEventListener('click', function() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hour = String(now.getHours()).padStart(2, '0');
+            const minute = String(now.getMinutes()).padStart(2, '0');
+            const formattedDateTime = `${year}${month}${day}${hour}${minute}`;
+            const zipFileName = `${formattedDateTime}裁剪後照片.zip`;
+
+            zip.generateAsync({type: 'blob'}).then(function(content) {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = zipFileName;
+                link.click();
+
+                // 重置頁面
+                imageInput.value = '';
+                downloadAll.style.display = 'none';
+                presetSize.value = '800';
+                customSizeInputs.style.display = 'none';
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+
+
